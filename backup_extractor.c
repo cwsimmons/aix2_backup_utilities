@@ -116,38 +116,41 @@ int main(int argc, char** argv) {
         int file_length = ftell(backup_file);
         printf("File length = %d\n", file_length);
 
+        // In this case file data follows the volume header
+        if (x != 0) {
 
-        if (current_output_file != NULL) {
-            // Finish extracting file from last file
-            fseek(backup_file, volume_header.v.h.len * 8, SEEK_SET);
+            int new_endpoint = min(name_header.n.size, bytes_copied + file_length - (volume_header.v.h.len * 8));
 
-            while (bytes_copied < name_header.n.size) {
-                int grab = min(name_header.n.size - bytes_copied, BUFFER_SIZE);
-                fread(buffer, 1, grab, backup_file);
-                fwrite(buffer, 1, grab, current_output_file);
-                bytes_copied += grab;
+            if (current_output_file != NULL) {
+                // Finish extracting file from last file
+                fseek(backup_file, volume_header.v.h.len * 8, SEEK_SET);
+
+                while (bytes_copied < new_endpoint) {
+                    int grab = min(new_endpoint - bytes_copied, BUFFER_SIZE);
+                    fread(buffer, 1, grab, backup_file);
+                    fwrite(buffer, 1, grab, current_output_file);
+                    bytes_copied += grab;
+                }
+
+                if (new_endpoint == name_header.n.size) {
+                    fclose(current_output_file);
+                    current_output_file = NULL;
+                }
+
             }
-
-            fclose(current_output_file);
-            current_output_file = NULL;
 
         }
         
         x += volume_header.v.h.len * 8;
 
-
-        while(1) {
+        while(x < file_length) {
 
             fseek(backup_file, x, SEEK_SET);
             
             int num_read = fread(&name_header, sizeof(union fs_rec), 1, backup_file);
             if (num_read != 1) {
                 break;
-            }
-            else if (name_header.h.type != FS_NAME) {
-                printf("Warning: non FS_NAME header found (%d)\n", name_header.h.type);
-                break;
-            } else {
+            } else if (name_header.h.type == FS_NAME) {
                 printf("0x%.4x: %s  (length = %d) (mode=0x%.4x)\n", x, name_header.n.name, name_header.n.size, name_header.n.mode);
 
                 x += name_header.h.len * 8;
@@ -165,7 +168,8 @@ int main(int argc, char** argv) {
 
                     if (current_output_file == 0) {
                         printf("Could not open for writing\n");
-                        continue;;
+                        fseek(backup_file, bytes_to_copy, SEEK_CUR);    // put the file pointer where it would have been
+                        continue;
                     }
 
                     bytes_copied = 0;
@@ -180,18 +184,18 @@ int main(int argc, char** argv) {
                     if (bytes_copied == name_header.n.size) {
                         fclose(current_output_file);
                         current_output_file = NULL;
-                    } else {
-                        x -= file_length;
-                        break;
                     }
-
                 }
-
-                
+            } else if (name_header.h.type == FS_END) {
+                printf("End record reaached\n");
+                break;
+            } else {
+                printf("Warning: Unsupported header found (type number = %d)\n", name_header.h.type);
+                break;
             }
-            
-
         }
+
+        x -= file_length;
 
         fclose(backup_file);
 

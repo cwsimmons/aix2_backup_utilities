@@ -11,9 +11,9 @@ program should be the file name of a volume. They will be processed in the order
 
 ## Limitations
 
-* All files are created in the current working directory
-* The program can handle files which span two volumes, but not three.
+* All files are created in the current working directory. If a file name is an absolute path the program will attempt to use it as-is, which is probably not desirable behavior.
 * File time stamps and permission flags are not set to their values from the backup
+* Only "by name" backups are supported.
 
 ## License
 
